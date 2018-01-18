@@ -312,6 +312,14 @@ for addrSet in re.finditer(r"(set security zones security-zone [A-Za-z0-9_-]{1,}
     addresses[addrSet.group(2)] = {}
     addresses[addrSet.group(2)]['type'] = 'group'
 
+
+# Convert address book address sets with nested address sets to network object groups
+
+for addrSetNested in re.finditer(r"(set security zones security-zone [A-Za-z0-9_-]{1,} address-book address-set ([A-Za-z0-9_-]{1,}) address-set ([A-Za-z0-9_-]{1,}))", config):
+    print "object-group network " + addrSetNested.group(2) + "\n group-object " + addrSetNested.group(3)
+    addresses[addrSetNested.group(2)] = {}
+    addresses[addrSetNested.group(2)]['type'] = 'group'
+
 # Convert security policies to access control lists
 
 for policy in re.finditer(r"((set security policies from-zone ([A-Za-z0-9_-]{1,}) to-zone [A-Za-z0-9_-]{1,} policy ([A-Za-z0-9_-]{1,}) match source-address ([A-Za-z0-9_-]{1,})[\r\n]){1,}(set security policies from-zone [A-Za-z0-9_-]{1,} to-zone [A-Za-z0-9_-]{1,} policy [A-Za-z0-9_-]{1,} match destination-address ([A-Za-z0-9_-]{1,})[\r\n]){1,}(set security policies from-zone [A-Za-z0-9_-]{1,} to-zone [A-Za-z0-9_-]{1,} policy [A-Za-z0-9_-]{1,} match application [A-Za-z0-9_-]{1,}[\r\n]){1,}(set security policies from-zone [A-Za-z0-9_-]{1,} to-zone [A-Za-z0-9_-]{1,} policy [A-Za-z0-9_-]{1,} then (permit)|(reject)|(deny)){1,})", config):
