@@ -2,7 +2,7 @@
 
 # Original version was made by Glenn Akester in 2017
 #
-# Forked by Eugene Khabarov
+# Contributors: Eugene Khabarov
 #
 # Title: SRX to ASA Converter v1.1
 # Description: Python script to convert Juniper SRX configuration to Cisco ASA.
@@ -37,33 +37,44 @@ args = parser.parse_args()
 with open(args.inputFile, 'r') as configFile:
     config = configFile.read()
 
-# Get local networks
-
-localnetworks = {}
-
-netnum = 0
-
-for n in re.finditer(r"set interfaces ((pp|reth|ae|fe|ge|xe)(-[0-9]{1,2}\/[0-9]{1,2}\/)?[0-9]{1,2}) unit ([0-9]{1,4}) family inet address ([0-9]{1,3}[.][0-9]{1,3}[.][0-9]{1,3}[.][0-9]{1,3}\/[0-9]{1,2})", config):
-    intf = n.group(1) + "." + n.group(4)
-    netw = n.group(5)
-
-    localnetworks[netw] = {}
-    localnetworks[netw]['intf'] = intf
-
-    seczone = re.search(r"set security zones security-zone ([A-Za-z0-9_-]{1,}) interfaces " + intf, config)
-
-    if seczone is not None:
-        localnetworks[netw]['seczone'] = seczone.group(1)
-    else:
-        localnetworks[netw]['seczone'] = 'undefined'
- 
-    netnum += 1
 
 # Convert system host name
 
 hostname = re.search(r"(set system host-name ([A-Za-z0-9_-]{1,}))", config)
 if hostname is not None:
     print "hostname " + hostname.group(2)
+
+# Get local networks
+
+localnetworks = {}
+
+netnum = 0
+
+asa_seczones = set()
+
+for n in re.finditer(r"set interfaces ((pp|reth|ae|fe|ge|xe)(-[0-9]{1,2}\/[0-9]{1,2}\/)?[0-9]{1,2}) unit ([0-9]{1,4}) family inet address ([0-9]{1,3}[.][0-9]{1,3}[.][0-9]{1,3}[.][0-9]{1,3}\/[0-9]{1,2})", config):
+    intf = n.group(1) + "." + n.group(4)
+    netw = n.group(5)
+    unit = n.group(4)
+
+    localnetworks[netw] = {}
+    localnetworks[netw]['intf'] = intf
+    localnetworks[netw]['vlan'] = unit
+
+    seczone = re.search(r"set security zones security-zone ([A-Za-z0-9_-]{1,}) interfaces " + intf, config)
+
+    if seczone is not None:
+        localnetworks[netw]['seczone'] = seczone.group(1)
+        if seczone.group(1) not in asa_seczones:
+            asa_seczones.add(seczone.group(1))
+    else:
+        localnetworks[netw]['seczone'] = 'undefined'
+
+    netnum += 1
+
+#create asa security zones
+for values in asa_seczones:
+    print "zone " + str(values)
 
 # Convert CIDR subnet mask to dot decimal
 
@@ -103,22 +114,30 @@ config = re.sub(r"([0-9]{1,3}[.][0-9]{1,3}[.][0-9]{1,3}[.][0-9]{1,3})(\/0)", r"\
 
 # Convert interfaces
 
-intfnum = 0
+#intfnum = 0
 
 for n in re.finditer(r"(set interfaces ((pp|reth|ae|fe|ge|xe)(-[0-9]{1,2}\/[0-9]{1,2}\/)?([0-9]{1,2})) unit ([0-9]{1,4}) family inet address ([0-9]{1,3}[.][0-9]{1,3}[.][0-9]{1,3}[.][0-9]{1,3} [0-9]{1,3}[.][0-9]{1,3}[.][0-9]{1,3}[.][0-9]{1,3}))", config):
-    if intfnum <= 8:
+    #if intfnum <= 8:
         seczone = re.search(r"set security zones security-zone ([A-Za-z0-9_-]{1,}) interfaces " + n.group(2) + "." + n.group(6), config)
 
-        if seczone is not None:
-            print "interface GigabitEthernet0/" + n.group(5) + "\n nameif " + seczone.group(1) + "\n security-level 0\n ip address " + n.group(7)
+        if (seczone == "trusted" or seczone == "inside"):
+            seclevel = "100"
+        elif (seczone == "untrusted" or seczone == "outside"):
+            seclevel = "0"
         else:
-            print "interface GigabitEthernet0/" + n.group(5) + "\n nameif undefined\n security-level 0\n ip address " + n.group(7)
+            seclevel = "50"
 
-    intfnum += 1
+        if seczone is not None:
+            #nameif will be seczone name + vlan to make it uniq
+            print "interface GigabitEthernet0/" + n.group(5) + "." + n.group(6) + "\n vlan " + n.group(6) + "\n nameif " + seczone.group(1) + n.group(6) + "\n zone-member " + seczone.group(1) + "\n security-level " + seclevel +"\n ip address " + n.group(7)
+        else:
+            print "interface GigabitEthernet0/" + n.group(5) + "." + n.group(6) + "\n vlan " + n.group(6) + "\n nameif undefined\n security-level 0\n ip address " + n.group(7)
+
+    #intfnum += 1
 
 # Convert static routes
 
-for n in re.finditer(r"set routing-options static route ([0-9]{1,3}[.][0-9]{1,3}[.][0-9]{1,3}[.][0-9]{1,3} [0-9]{1,3}[.][0-9]{1,3}[.][0-9]{1,3}[.][0-9]{1,3}) next-hop ([0-9]{1,3}[.][0-9]{1,3}[.][0-9]{1,3}[.][0-9]{1,3})", config): 
+for n in re.finditer(r"set routing-options static route ([0-9]{1,3}[.][0-9]{1,3}[.][0-9]{1,3}[.][0-9]{1,3} [0-9]{1,3}[.][0-9]{1,3}[.][0-9]{1,3}[.][0-9]{1,3}) next-hop ([0-9]{1,3}[.][0-9]{1,3}[.][0-9]{1,3}[.][0-9]{1,3})", config):
     for key, value in localnetworks.iteritems():
         if netaddr.IPAddress(n.group(2)) in netaddr.IPNetwork(key):
             print "route " + value['seczone'] + " " + n.group(1) + " " + n.group(2)
@@ -471,4 +490,4 @@ for policy in re.finditer(r"((set security policies from-zone ([A-Za-z0-9_-]{1,}
 # Bind access control lists to interfaces
 
 for key, value in localnetworks.iteritems():
-    print "access-group " + value['seczone'] + "_in in interface " + value['seczone']
+    print "access-group " + value['seczone'] + "_in in interface " + value['seczone'] + value['vlan']
