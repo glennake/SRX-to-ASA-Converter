@@ -17,7 +17,7 @@ python convert.py /full/path/to/config
 
 ## Changes in version 1.1
 
-- Obgects and object-groups parcing is fixed
+- Obgects and object-groups parsing is fixed
 - Port ranges are handled correctly now
 - Converter creates ASA security zones for each SRX security zone and assign uniq nameif for each ASA interface
 - VLAN (ASA subinterfaces) are created now
