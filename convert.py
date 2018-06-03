@@ -2,7 +2,7 @@
 
 # Original version was made by Glenn Akester in 2017
 #
-# Contributors: Eugene Khabarov
+# Fork author: Eugene Khabarov
 #
 # Title: SRX to ASA Converter v1.1
 # Description: Python script to convert Juniper SRX configuration to Cisco ASA.
