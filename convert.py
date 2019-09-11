@@ -1,8 +1,10 @@
 #!/usr/bin/env python2.7
 
-# (c) 2017, Glenn Akester
+# Original version was made by Glenn Akester in 2017
 #
-# Title: SRX to ASA Converter
+# Fork author: Eugene Khabarov
+#
+# Title: SRX to ASA Converter v1.1
 # Description: Python script to convert Juniper SRX configuration to Cisco ASA.
 #
 # SRX to ASA Converter is free software: you can redistribute it and/or modify
@@ -15,8 +17,8 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
 #
-# You should have received a copy of the GNU General Public License
-# along with Ansible.  If not, see <http://www.gnu.org/licenses/>.
+# If you don't have a copy of the GNU General Public License,
+# it is available here <http://www.gnu.org/licenses/>.
 
 # Import modules
 
@@ -35,33 +37,44 @@ args = parser.parse_args()
 with open(args.inputFile, 'r') as configFile:
     config = configFile.read()
 
-# Get local networks
-
-localnetworks = {}
-
-netnum = 0
-
-for n in re.finditer(r"set interfaces ((pp|reth|ae|fe|ge|xe)(-[0-9]{1,2}\/[0-9]{1,2}\/)?[0-9]{1,2}) unit ([0-9]{1,4}) family inet address ([0-9]{1,3}[.][0-9]{1,3}[.][0-9]{1,3}[.][0-9]{1,3}\/[0-9]{1,2})", config):
-    intf = n.group(1) + "." + n.group(4)
-    netw = n.group(5)
-
-    localnetworks[netw] = {}
-    localnetworks[netw]['intf'] = intf
-
-    seczone = re.search(r"set security zones security-zone ([A-Za-z0-9_-]{1,}) interfaces " + intf, config)
-
-    if seczone is not None:
-        localnetworks[netw]['seczone'] = seczone.group(1)
-    else:
-        localnetworks[netw]['seczone'] = 'undefined'
- 
-    netnum += 1
 
 # Convert system host name
 
 hostname = re.search(r"(set system host-name ([A-Za-z0-9_-]{1,}))", config)
 if hostname is not None:
     print "hostname " + hostname.group(2)
+
+# Get local networks
+
+localnetworks = {}
+
+netnum = 0
+
+asa_seczones = set()
+
+for n in re.finditer(r"set interfaces ((pp|reth|ae|fe|ge|xe)(-[0-9]{1,2}\/[0-9]{1,2}\/)?[0-9]{1,2}) unit ([0-9]{1,4}) family inet address ([0-9]{1,3}[.][0-9]{1,3}[.][0-9]{1,3}[.][0-9]{1,3}\/[0-9]{1,2})", config):
+    intf = n.group(1) + "." + n.group(4)
+    netw = n.group(5)
+    unit = n.group(4)
+
+    localnetworks[netw] = {}
+    localnetworks[netw]['intf'] = intf
+    localnetworks[netw]['vlan'] = unit
+
+    seczone = re.search(r"set security zones security-zone ([A-Za-z0-9_-]{1,}) interfaces " + intf, config)
+
+    if seczone is not None:
+        localnetworks[netw]['seczone'] = seczone.group(1)
+        if seczone.group(1) not in asa_seczones:
+            asa_seczones.add(seczone.group(1))
+    else:
+        localnetworks[netw]['seczone'] = 'undefined'
+
+    netnum += 1
+
+#create asa security zones
+for values in asa_seczones:
+    print "zone " + str(values)
 
 # Convert CIDR subnet mask to dot decimal
 
@@ -101,22 +114,30 @@ config = re.sub(r"([0-9]{1,3}[.][0-9]{1,3}[.][0-9]{1,3}[.][0-9]{1,3})(\/0)", r"\
 
 # Convert interfaces
 
-intfnum = 0
+#intfnum = 0
 
 for n in re.finditer(r"(set interfaces ((pp|reth|ae|fe|ge|xe)(-[0-9]{1,2}\/[0-9]{1,2}\/)?([0-9]{1,2})) unit ([0-9]{1,4}) family inet address ([0-9]{1,3}[.][0-9]{1,3}[.][0-9]{1,3}[.][0-9]{1,3} [0-9]{1,3}[.][0-9]{1,3}[.][0-9]{1,3}[.][0-9]{1,3}))", config):
-    if intfnum <= 8:
+    #if intfnum <= 8:
         seczone = re.search(r"set security zones security-zone ([A-Za-z0-9_-]{1,}) interfaces " + n.group(2) + "." + n.group(6), config)
 
-        if seczone is not None:
-            print "interface GigabitEthernet0/" + n.group(5) + "\n nameif " + seczone.group(1) + "\n security-level 0\n ip address " + n.group(7)
+        if (seczone == "trusted" or seczone == "inside"):
+            seclevel = "100"
+        elif (seczone == "untrusted" or seczone == "outside"):
+            seclevel = "0"
         else:
-            print "interface GigabitEthernet0/" + n.group(5) + "\n nameif undefined\n security-level 0\n ip address " + n.group(7)
+            seclevel = "50"
 
-    intfnum += 1
+        if seczone is not None:
+            #nameif will be seczone name + vlan to make it uniq
+            print "interface GigabitEthernet0/" + n.group(5) + "." + n.group(6) + "\n vlan " + n.group(6) + "\n nameif " + seczone.group(1) + n.group(6) + "\n zone-member " + seczone.group(1) + "\n security-level " + seclevel +"\n ip address " + n.group(7)
+        else:
+            print "interface GigabitEthernet0/" + n.group(5) + "." + n.group(6) + "\n vlan " + n.group(6) + "\n nameif undefined\n security-level 0\n ip address " + n.group(7)
+
+    #intfnum += 1
 
 # Convert static routes
 
-for n in re.finditer(r"set routing-options static route ([0-9]{1,3}[.][0-9]{1,3}[.][0-9]{1,3}[.][0-9]{1,3} [0-9]{1,3}[.][0-9]{1,3}[.][0-9]{1,3}[.][0-9]{1,3}) next-hop ([0-9]{1,3}[.][0-9]{1,3}[.][0-9]{1,3}[.][0-9]{1,3})", config): 
+for n in re.finditer(r"set routing-options static route ([0-9]{1,3}[.][0-9]{1,3}[.][0-9]{1,3}[.][0-9]{1,3} [0-9]{1,3}[.][0-9]{1,3}[.][0-9]{1,3}[.][0-9]{1,3}) next-hop ([0-9]{1,3}[.][0-9]{1,3}[.][0-9]{1,3}[.][0-9]{1,3})", config):
     for key, value in localnetworks.iteritems():
         if netaddr.IPAddress(n.group(2)) in netaddr.IPNetwork(key):
             print "route " + value['seczone'] + " " + n.group(1) + " " + n.group(2)
@@ -257,15 +278,100 @@ applications['junos-dns-tcp']['direction'] = 'destination'
 applications['junos-dns-tcp']['port'] = '53'
 applications['junos-dns-tcp']['type'] = 'object'
 
+applications['junos-pop3'] = {}
+applications['junos-pop3']['protocol'] = 'tcp'
+applications['junos-pop3']['direction'] = 'destination'
+applications['junos-pop3']['port'] = '110'
+applications['junos-pop3']['type'] = 'object'
+
+applications['junos-imap'] = {}
+applications['junos-imap']['protocol'] = 'tcp'
+applications['junos-imap']['direction'] = 'destination'
+applications['junos-imap']['port'] = '143'
+applications['junos-imap']['type'] = 'object'
+
+applications['junos-ike'] = {}
+applications['junos-ike']['protocol'] = 'udp'
+applications['junos-ike']['direction'] = 'destination'
+applications['junos-ike']['port'] = '500'
+applications['junos-ike']['type'] = 'object'
+
+applications['junos-tacacs'] = {}
+applications['junos-tacacs']['protocol'] = 'tcp'
+applications['junos-tacacs']['direction'] = 'destination'
+applications['junos-tacacs']['port'] = '49'
+applications['junos-tacacs']['type'] = 'object'
+
+applications['junos-tacacs-ds'] = {}
+applications['junos-tacacs-ds']['protocol'] = 'tcp'
+applications['junos-tacacs-ds']['direction'] = 'destination'
+applications['junos-tacacs-ds']['port'] = '65'
+applications['junos-tacacs-ds']['type'] = 'object'
+
+applications['junos-tftp'] = {}
+applications['junos-tftp']['protocol'] = 'udp'
+applications['junos-tftp']['direction'] = 'destination'
+applications['junos-tftp']['port'] = '69'
+applications['junos-tftp']['type'] = 'object'
+
+applications['junos-nfs'] = {}
+applications['junos-nfs']['protocol'] = 'udp'
+applications['junos-nfs']['direction'] = 'destination'
+applications['junos-nfs']['port'] = '111'
+applications['junos-nfs']['type'] = 'object'
+
+applications['junos-nfsd-tcp'] = {}
+applications['junos-nfsd-tcp']['protocol'] = 'udp'
+applications['junos-nfsd-tcp']['direction'] = 'destination'
+applications['junos-nfsd-tcp']['port'] = '2049'
+applications['junos-nfsd-tcp']['type'] = 'object'
+
+applications['junos-nfsd-udp'] = {}
+applications['junos-nfsd-udp']['protocol'] = 'udp'
+applications['junos-nfsd-udp']['direction'] = 'destination'
+applications['junos-nfsd-udp']['port'] = '2049'
+applications['junos-nfsd-udp']['type'] = 'object'
+
+applications['junos-netbios-session'] = {}
+applications['junos-netbios-session']['protocol'] = 'tcp'
+applications['junos-netbios-session']['direction'] = 'destination'
+applications['junos-netbios-session']['port'] = '139'
+applications['junos-netbios-session']['type'] = 'object'
+
+applications['junos-winframe'] = {}
+applications['junos-winframe']['protocol'] = 'tcp'
+applications['junos-winframe']['direction'] = 'destination'
+applications['junos-winframe']['port'] = '1494'
+applications['junos-winframe']['type'] = 'object'
+
+applications['junos-sccp'] = {}
+applications['junos-sccp']['protocol'] = 'tcp'
+applications['junos-sccp']['direction'] = 'destination'
+applications['junos-sccp']['port'] = '2000'
+applications['junos-sccp']['type'] = 'object'
+
 #applications['junos-'] = {}
 #applications['junos-']['protocol'] = ''
 #applications['junos-']['direction'] = ''
 #applications['junos-']['port'] = ''
 #applications['junos-']['type'] = 'object'
 
-# Convert applications to service objects
 
-for n in re.finditer(r"(set applications application ([A-Za-z0-9_-]{1,}) protocol (tcp|udp)[\r\n])(set applications application [A-Za-z0-9_-]{1,} (destination|source)-port ([0-9]{1,5}(-[0-9]{1,5})?|[A-Za-z0-9_-]{1,})[\r\n])", config):
+
+# Convert ranged src/dst port applications to service objects
+
+for n in re.finditer(r"(set applications application ([A-Za-z0-9_-]{1,}) protocol (tcp|udp)[\r\n]+)(set applications application [A-Za-z0-9_-]{1,} (destination|source)-port ([0-9]{1,5}-[0-9]{1,5})[\r\n]+)", config):
+    portrange = n.group(6).replace('-', ' ')
+    print "object service " + n.group(2) + "\n service " + n.group(3) + " destination range " + portrange
+    applications[n.group(2)] = {}
+    applications[n.group(2)]['protocol'] = n.group(3)
+    applications[n.group(2)]['direction'] = n.group(5)
+    applications[n.group(2)]['port'] = portrange
+    applications[n.group(2)]['type'] = 'object'
+
+# Convert single src/dst port applications to service objects
+
+for n in re.finditer(r"(set applications application ([A-Za-z0-9_-]{1,}) protocol (tcp|udp)[\r\n]+)(set applications application [A-Za-z0-9_-]{1,} (destination|source)-port ([0-9]{1,5}|[a-z-]{3,})[\r\n]+)", config):
     print "object service " + n.group(2) + "\n service " + n.group(3) + " destination eq " + n.group(6)
     applications[n.group(2)] = {}
     applications[n.group(2)]['protocol'] = n.group(3)
@@ -273,9 +379,20 @@ for n in re.finditer(r"(set applications application ([A-Za-z0-9_-]{1,}) protoco
     applications[n.group(2)]['port'] = n.group(6).replace('-',' ')
     applications[n.group(2)]['type'] = 'object'
 
-# Convert applications with multiple terms to service object groups
+# Convert ranged src/dst port applications with multiple terms to service object groups
 
-for n in re.finditer(r"(set applications application ([A-Za-z0-9_-]{1,}) term [A-Za-z0-9_-]{1,} protocol (tcp|udp)[\r\n])(set applications application [A-Za-z0-9_-]{1,} term [A-Za-z0-9_-]{1,} (destination|source)-port ([0-9]{1,5}(-[0-9]{1,5})?)[\r\n])", config):
+for n in re.finditer(r"(set applications application ([A-Za-z0-9_-]{1,}) term [A-Za-z0-9_-]{1,} protocol (tcp|udp)[\r\n]+)(set applications application [A-Za-z0-9_-]{1,} term [A-Za-z0-9_-]{1,} (destination|source)-port ([0-9]{1,5}-[0-9]{1,5})[\r\n]+)", config):
+    portrange = n.group(6).replace('-', ' ')
+    print "object-group service " + n.group(2) + "-" + n.group(3) + " " + n.group(3) + "\n port-object range " + portrange
+    applications[n.group(2)] = {}
+    applications[n.group(2)]['protocol'] = n.group(3)
+    applications[n.group(2)]['direction'] = n.group(5)
+    applications[n.group(2)]['port'] = portrange
+    applications[n.group(2)]['type'] = 'group'
+
+# Convert single src/dst port applications with multiple terms to service object groups
+
+for n in re.finditer(r"(set applications application ([A-Za-z0-9_-]{1,}) term [A-Za-z0-9_-]{1,} protocol (tcp|udp)[\r\n]+)(set applications application [A-Za-z0-9_-]{1,} term [A-Za-z0-9_-]{1,} (destination|source)-port ([0-9]{1,5}||[a-z-]{3,})[\r\n]+)", config):
     print "object-group service " + n.group(2) + "-" + n.group(3) + " " + n.group(3) + "\n port-object eq " + n.group(6)
     applications[n.group(2)] = {}
     applications[n.group(2)]['protocol'] = n.group(3)
@@ -305,10 +422,20 @@ for addr in re.finditer(r"(set security zones security-zone [A-Za-z0-9_-]{1,} ad
     addresses[addr.group(2)] = {}
     addresses[addr.group(2)]['type'] = 'object'
 
-# Convert address book address sets to network object groups
+# Convert address book with network/subnet address sets to network object groups
 
-for addrSet in re.finditer(r"(set security zones security-zone [A-Za-z0-9_-]{1,} address-book address-set ([A-Za-z0-9_-]{1,}) address ([A-Za-z0-9_-]{1,}))", config):
-    print "object-group network " + addrSet.group(2) + "\n network-object object " + addrSet.group(3)
+for addrSet in re.finditer(r"(set security zones security-zone [A-Za-z0-9_-]{1,} address-book address-set ([A-Za-z0-9_-]{1,}) address ([0-9]{1,3}[.][0-9]{1,3}[.][0-9]{1,3}[.][0-9]{1,3} [0-9]{1,3}[.][0-9]{1,3}[.][0-9]{1,3}[.][0-9]{1,3}))", config):
+    print "object-group network " + addrSet.group(2) + "\n network-object " + addrSet.group(3)
+    addresses[addrSet.group(2)] = {}
+    addresses[addrSet.group(2)]['type'] = 'group'
+
+# Convert address book address with objects/hosts sets to network object groups
+
+for addrSet in re.finditer(r"(set security zones security-zone [A-Za-z0-9_-]{1,} address-book address-set ([A-Za-z0-9_-]{1,}) address ([.A-Za-z0-9_-]{1,}))", config):
+    if re.match(r"([0-9]{1,3}[.][0-9]{1,3}[.][0-9]{1,3}[.][0-9]{1,3})",addrSet.group(3)):
+        print "object-group network " + addrSet.group(2) + "\n network-object host " + addrSet.group(3)
+    else:
+        print "object-group network " + addrSet.group(2) + "\n network-object object " + addrSet.group(3)
     addresses[addrSet.group(2)] = {}
     addresses[addrSet.group(2)]['type'] = 'group'
 
@@ -321,7 +448,7 @@ for addrSetNested in re.finditer(r"(set security zones security-zone [A-Za-z0-9_
 
 # Convert security policies to access control lists
 
-for policy in re.finditer(r"((set security policies from-zone ([A-Za-z0-9_-]{1,}) to-zone [A-Za-z0-9_-]{1,} policy ([A-Za-z0-9_-]{1,}) match source-address ([A-Za-z0-9_-]{1,})[\r\n]){1,}(set security policies from-zone [A-Za-z0-9_-]{1,} to-zone [A-Za-z0-9_-]{1,} policy [A-Za-z0-9_-]{1,} match destination-address ([A-Za-z0-9_-]{1,})[\r\n]){1,}(set security policies from-zone [A-Za-z0-9_-]{1,} to-zone [A-Za-z0-9_-]{1,} policy [A-Za-z0-9_-]{1,} match application [A-Za-z0-9_-]{1,}[\r\n]){1,}(set security policies from-zone [A-Za-z0-9_-]{1,} to-zone [A-Za-z0-9_-]{1,} policy [A-Za-z0-9_-]{1,} then (permit)|(reject)|(deny)){1,})", config):
+for policy in re.finditer(r"((set security policies from-zone ([A-Za-z0-9_-]{1,}) to-zone [A-Za-z0-9_-]{1,} policy ([A-Za-z0-9_-]{1,}) match source-address ([A-Za-z0-9_-]{1,})[\r\n]+){1,}(set security policies from-zone [A-Za-z0-9_-]{1,} to-zone [A-Za-z0-9_-]{1,} policy [A-Za-z0-9_-]{1,} match destination-address ([A-Za-z0-9_-]{1,})[\r\n]+){1,}(set security policies from-zone [A-Za-z0-9_-]{1,} to-zone [A-Za-z0-9_-]{1,} policy [A-Za-z0-9_-]{1,} match application [A-Za-z0-9_-]{1,}[\r\n]+){1,}(set security policies from-zone [A-Za-z0-9_-]{1,} to-zone [A-Za-z0-9_-]{1,} policy [A-Za-z0-9_-]{1,} then (permit)|(reject)|(deny)){1,})", config):
     for policySrc in re.finditer(r"(set security policies from-zone [A-Za-z0-9_-]{1,} to-zone [A-Za-z0-9_-]{1,} policy [A-Za-z0-9_-]{1,} match source-address ([A-Za-z0-9_-]{1,}))", policy.group(1)):
         if addresses[policySrc.group(2)]['type'] == 'object':
             policySrcType = 'object '
@@ -363,4 +490,4 @@ for policy in re.finditer(r"((set security policies from-zone ([A-Za-z0-9_-]{1,}
 # Bind access control lists to interfaces
 
 for key, value in localnetworks.iteritems():
-    print "access-group " + value['seczone'] + "_in in interface " + value['seczone']
+    print "access-group " + value['seczone'] + "_in in interface " + value['seczone'] + value['vlan']
