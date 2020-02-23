@@ -4,7 +4,7 @@
 #
 # Fork author: Eugene Khabarov
 #
-# Title: SRX to ASA Converter v1.1
+# Title: SRX to ASA Converter v1.2
 # Description: Python script to convert Juniper SRX configuration to Cisco ASA.
 #
 # SRX to ASA Converter is free software: you can redistribute it and/or modify
@@ -417,21 +417,21 @@ addresses['any']['type'] = 'any'
 
 # Convert address book addresses to network objects
 
-for addr in re.finditer(r"(set security zones security-zone [A-Za-z0-9_-]{1,} address-book address ([A-Za-z0-9_-]{1,}) ([0-9]{1,3}[.][0-9]{1,3}[.][0-9]{1,3}[.][0-9]{1,3} [0-9]{1,3}[.][0-9]{1,3}[.][0-9]{1,3}[.][0-9]{1,3}))", config):
+for addr in re.finditer(r"(set security (?:zones security-zone [A-Za-z0-9_-]{1,} )?address-book(?: global)? address ([A-Za-z0-9_-]{1,}) ([0-9]{1,3}[.][0-9]{1,3}[.][0-9]{1,3}[.][0-9]{1,3} [0-9]{1,3}[.][0-9]{1,3}[.][0-9]{1,3}[.][0-9]{1,3}))", config):
     print "object network " + addr.group(2) + "\n subnet " + addr.group(3)
     addresses[addr.group(2)] = {}
     addresses[addr.group(2)]['type'] = 'object'
 
 # Convert address book with network/subnet address sets to network object groups
 
-for addrSet in re.finditer(r"(set security zones security-zone [A-Za-z0-9_-]{1,} address-book address-set ([A-Za-z0-9_-]{1,}) address ([0-9]{1,3}[.][0-9]{1,3}[.][0-9]{1,3}[.][0-9]{1,3} [0-9]{1,3}[.][0-9]{1,3}[.][0-9]{1,3}[.][0-9]{1,3}))", config):
+for addrSet in re.finditer(r"(set security (?:zones security-zone [A-Za-z0-9_-]{1,} )?address-book(?: global)? address-set ([A-Za-z0-9_-]{1,}) address ([0-9]{1,3}[.][0-9]{1,3}[.][0-9]{1,3}[.][0-9]{1,3} [0-9]{1,3}[.][0-9]{1,3}[.][0-9]{1,3}[.][0-9]{1,3}))", config):
     print "object-group network " + addrSet.group(2) + "\n network-object " + addrSet.group(3)
     addresses[addrSet.group(2)] = {}
     addresses[addrSet.group(2)]['type'] = 'group'
 
 # Convert address book address with objects/hosts sets to network object groups
 
-for addrSet in re.finditer(r"(set security zones security-zone [A-Za-z0-9_-]{1,} address-book address-set ([A-Za-z0-9_-]{1,}) address ([.A-Za-z0-9_-]{1,}))", config):
+for addrSet in re.finditer(r"(set security (?:zones security-zone [A-Za-z0-9_-]{1,} )?address-book(?: global)? address-set ([A-Za-z0-9_-]{1,}) address ([.A-Za-z0-9_-]{1,}))", config):
     if re.match(r"([0-9]{1,3}[.][0-9]{1,3}[.][0-9]{1,3}[.][0-9]{1,3})",addrSet.group(3)):
         print "object-group network " + addrSet.group(2) + "\n network-object host " + addrSet.group(3)
     else:
@@ -441,7 +441,7 @@ for addrSet in re.finditer(r"(set security zones security-zone [A-Za-z0-9_-]{1,}
 
 # Convert address book address sets with nested address sets to network object groups
 
-for addrSetNested in re.finditer(r"(set security zones security-zone [A-Za-z0-9_-]{1,} address-book address-set ([A-Za-z0-9_-]{1,}) address-set ([A-Za-z0-9_-]{1,}))", config):
+for addrSetNested in re.finditer(r"(set security (?:zones security-zone [A-Za-z0-9_-]{1,} )?address-book(?: global)? address-set ([A-Za-z0-9_-]{1,}) address-set ([A-Za-z0-9_-]{1,}))", config):
     print "object-group network " + addrSetNested.group(2) + "\n group-object " + addrSetNested.group(3)
     addresses[addrSetNested.group(2)] = {}
     addresses[addrSetNested.group(2)]['type'] = 'group'
