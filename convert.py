@@ -1,10 +1,10 @@
 #!/usr/bin/env python2.7
 
-# Original version was made by Glenn Akester in 2017
+# (C) 2017, Glenn Akester
 #
-# Fork author: Eugene Khabarov
+# Contributors: Eugene Khabarov
 #
-# Title: SRX to ASA Converter v1.2
+# Title: SRX to ASA Converter v1.3
 # Description: Python script to convert Juniper SRX configuration to Cisco ASA.
 #
 # SRX to ASA Converter is free software: you can redistribute it and/or modify
@@ -36,7 +36,6 @@ args = parser.parse_args()
 
 with open(args.inputFile, 'r') as configFile:
     config = configFile.read()
-
 
 # Convert system host name
 
@@ -164,6 +163,48 @@ applications['junos-icmp-ping']['direction'] = 'destination'
 applications['junos-icmp-ping']['port'] = 'echo'
 applications['junos-icmp-ping']['type'] = 'object'
 
+applications['junos-ping'] = {}
+applications['junos-ping']['protocol'] = 'icmp'
+applications['junos-ping']['direction'] = 'destination'
+applications['junos-ping']['port'] = 'echo'
+applications['junos-ping']['type'] = 'object'
+
+applications['junos-pingv6'] = {}
+applications['junos-pingv6']['protocol'] = 'icmp6'
+applications['junos-pingv6']['direction'] = 'destination'
+applications['junos-pingv6']['port'] = ''
+applications['junos-pingv6']['type'] = 'object'
+
+applications['junos-bootpc'] = {}
+applications['junos-bootpc']['protocol'] = 'udp'
+applications['junos-bootpc']['direction'] = 'destination'
+applications['junos-bootpc']['port'] = '68'
+applications['junos-bootpc']['type'] = 'object'
+
+applications['junos-bootps'] = {}
+applications['junos-bootps']['protocol'] = 'udp'
+applications['junos-bootps']['direction'] = 'destination'
+applications['junos-bootps']['port'] = '67'
+applications['junos-bootps']['type'] = 'object'
+
+applications['junos-dhcp-client'] = {}
+applications['junos-dhcp-client']['protocol'] = 'udp'
+applications['junos-dhcp-client']['direction'] = 'destination'
+applications['junos-dhcp-client']['port'] = '68'
+applications['junos-dhcp-client']['type'] = 'object'
+
+applications['junos-dhcp-relay'] = {}
+applications['junos-dhcp-relay']['protocol'] = 'udp'
+applications['junos-dhcp-relay']['direction'] = 'destination'
+applications['junos-dhcp-relay']['port'] = '67'
+applications['junos-dhcp-relay']['type'] = 'object'
+
+applications['junos-dhcp-server'] = {}
+applications['junos-dhcp-server']['protocol'] = 'udp'
+applications['junos-dhcp-server']['direction'] = 'destination'
+applications['junos-dhcp-server']['port'] = '67'
+applications['junos-dhcp-server']['type'] = 'object'
+
 applications['junos-ssh'] = {}
 applications['junos-ssh']['protocol'] = 'tcp'
 applications['junos-ssh']['direction'] = 'destination'
@@ -200,6 +241,12 @@ applications['junos-radacct']['direction'] = 'destination'
 applications['junos-radacct']['port'] = '1813'
 applications['junos-radacct']['type'] = 'object'
 
+applications['junos-sip'] = {}
+applications['junos-sip']['protocol'] = 'udp'
+applications['junos-sip']['direction'] = 'destination'
+applications['junos-sip']['port'] = '5060'
+applications['junos-sip']['type'] = 'object'
+
 applications['junos-syslog'] = {}
 applications['junos-syslog']['protocol'] = 'udp'
 applications['junos-syslog']['direction'] = 'destination'
@@ -223,6 +270,12 @@ applications['junos-telnet']['protocol'] = 'tcp'
 applications['junos-telnet']['direction'] = 'destination'
 applications['junos-telnet']['port'] = '23'
 applications['junos-telnet']['type'] = 'object'
+
+applications['junos-sqlnet-v2'] = {}
+applications['junos-sqlnet-v2']['protocol'] = 'tcp'
+applications['junos-sqlnet-v2']['direction'] = 'destination'
+applications['junos-sqlnet-v2']['port'] = '1521'
+applications['junos-sqlnet-v2']['type'] = 'object'
 
 applications['junos-ms-sql'] = {}
 applications['junos-ms-sql']['protocol'] = 'tcp'
@@ -259,6 +312,12 @@ applications['junos-ldap']['protocol'] = 'tcp'
 applications['junos-ldap']['direction'] = 'destination'
 applications['junos-ldap']['port'] = '389'
 applications['junos-ldap']['type'] = 'object'
+
+applications['junos-nbds'] = {}
+applications['junos-nbds']['protocol'] = 'udp'
+applications['junos-nbds']['direction'] = 'destination'
+applications['junos-nbds']['port'] = '138'
+applications['junos-nbds']['type'] = 'object'
 
 applications['junos-nbname'] = {}
 applications['junos-nbname']['protocol'] = 'udp'
@@ -356,8 +415,6 @@ applications['junos-sccp']['type'] = 'object'
 #applications['junos-']['port'] = ''
 #applications['junos-']['type'] = 'object'
 
-
-
 # Convert ranged src/dst port applications to service objects
 
 for n in re.finditer(r"(set applications application ([A-Za-z0-9_-]{1,}) protocol (tcp|udp)[\r\n]+)(set applications application [A-Za-z0-9_-]{1,} (destination|source)-port ([0-9]{1,5}-[0-9]{1,5})[\r\n]+)", config):
@@ -415,10 +472,23 @@ addresses = {}
 addresses['any'] = {}
 addresses['any']['type'] = 'any'
 
+addresses['any-ipv4'] = {}
+addresses['any-ipv4']['type'] = 'any'
+
+addresses['any-ipv6'] = {}
+addresses['any-ipv6']['type'] = 'any'
+
 # Convert address book addresses to network objects
 
 for addr in re.finditer(r"(set security (?:zones security-zone [A-Za-z0-9_-]{1,} )?address-book(?: global)? address ([A-Za-z0-9_-]{1,}) ([0-9]{1,3}[.][0-9]{1,3}[.][0-9]{1,3}[.][0-9]{1,3} [0-9]{1,3}[.][0-9]{1,3}[.][0-9]{1,3}[.][0-9]{1,3}))", config):
     print "object network " + addr.group(2) + "\n subnet " + addr.group(3)
+    addresses[addr.group(2)] = {}
+    addresses[addr.group(2)]['type'] = 'object'
+
+# Convert address book dns name to network objects
+
+for addr in re.finditer(r"(set security (?:zones security-zone [A-Za-z0-9_-]{1,} )?address-book(?: global)? address ([A-Za-z0-9_-]{1,}) dns-name ([A-Za-z0-9_-]{1,}))", config):
+    print "object network " + addr.group(2) + "\n fqdn " + addr.group(3)
     addresses[addr.group(2)] = {}
     addresses[addr.group(2)]['type'] = 'object'
 
@@ -451,27 +521,35 @@ for addrSetNested in re.finditer(r"(set security (?:zones security-zone [A-Za-z0
 for policy in re.finditer(r"((set security policies from-zone ([A-Za-z0-9_-]{1,}) to-zone [A-Za-z0-9_-]{1,} policy ([A-Za-z0-9_-]{1,}) match source-address ([A-Za-z0-9_-]{1,})[\r\n]+){1,}(set security policies from-zone [A-Za-z0-9_-]{1,} to-zone [A-Za-z0-9_-]{1,} policy [A-Za-z0-9_-]{1,} match destination-address ([A-Za-z0-9_-]{1,})[\r\n]+){1,}(set security policies from-zone [A-Za-z0-9_-]{1,} to-zone [A-Za-z0-9_-]{1,} policy [A-Za-z0-9_-]{1,} match application [A-Za-z0-9_-]{1,}[\r\n]+){1,}(set security policies from-zone [A-Za-z0-9_-]{1,} to-zone [A-Za-z0-9_-]{1,} policy [A-Za-z0-9_-]{1,} then (permit)|(reject)|(deny)){1,})", config):
     for policySrc in re.finditer(r"(set security policies from-zone [A-Za-z0-9_-]{1,} to-zone [A-Za-z0-9_-]{1,} policy [A-Za-z0-9_-]{1,} match source-address ([A-Za-z0-9_-]{1,}))", policy.group(1)):
         if addresses[policySrc.group(2)]['type'] == 'object':
+            polSrc = policySrc.group(2)
             policySrcType = 'object '
         elif addresses[policySrc.group(2)]['type'] == 'group':
+            polSrc = policySrc.group(2)
             policySrcType = 'object-group '
         elif addresses[policySrc.group(2)]['type'] == 'any':
+            polSrc = 'any'
             policySrcType = ''
         else:
+            polSrc = policySrc.group(2)
             policySrcType = ''
 
         for policyDst in re.finditer(r"(set security policies from-zone [A-Za-z0-9_-]{1,} to-zone [A-Za-z0-9_-]{1,} policy [A-Za-z0-9_-]{1,} match destination-address ([A-Za-z0-9_-]{1,}))", policy.group(1)):
             if addresses[policyDst.group(2)]['type'] == 'object':
+                polDst = policyDst.group(2)
                 policyDstType = 'object '
             elif addresses[policyDst.group(2)]['type'] == 'group':
+                polDst = policyDst.group(2)
                 policyDstType = 'object-group '
             elif addresses[policyDst.group(2)]['type'] == 'any':
+                polDst = 'any'
                 policyDstType = ''
             else:
+                polDst = policyDst.group(2)
                 policyDstType = ''
 
             for policyApp in re.finditer(r"(set security policies from-zone [A-Za-z0-9_-]{1,} to-zone [A-Za-z0-9_-]{1,} policy [A-Za-z0-9_-]{1,} match application ([A-Za-z0-9_-]{1,}))", policy.group(1)):
                 if policyApp.group(2) == 'any':
-                    print "access-list " + policy.group(3) + "_in extended permit " + applications[policyApp.group(2)]['protocol'] + " " + policySrcType + policySrc.group(2) + " " + policyDstType + policyDst.group(2)
+                    print "access-list " + policy.group(3) + "_in extended permit " + applications[policyApp.group(2)]['protocol'] + " " + policySrcType + polSrc + " " + policyDstType + polDst
                 else:
                     if applications[policyApp.group(2)]['type'] == 'object':
 
@@ -482,10 +560,10 @@ for policy in re.finditer(r"((set security policies from-zone ([A-Za-z0-9_-]{1,}
                         else:
                             portOperator = ' '
 
-                        print "access-list " + policy.group(3) + "_in extended permit " + applications[policyApp.group(2)]['protocol'] + " " + policySrcType + policySrc.group(2) + " " + policyDstType + policyDst.group(2) + portOperator + applications[policyApp.group(2)]['port']
+                        print "access-list " + policy.group(3) + "_in extended permit " + applications[policyApp.group(2)]['protocol'] + " " + policySrcType + polSrc + " " + policyDstType + polDst + portOperator + applications[policyApp.group(2)]['port']
 
                     elif applications[policyApp.group(2)]['type'] == 'group':
-                        print "access-list " + policy.group(3) + "_in extended permit " + applications[policyApp.group(2)]['protocol'] + " " + policySrcType + policySrc.group(2) + " " + policyDstType + policyDst.group(2) + " object-group " + policyApp.group(2)
+                        print "access-list " + policy.group(3) + "_in extended permit " + applications[policyApp.group(2)]['protocol'] + " " + policySrcType + polSrc + " " + policyDstType + polDst + " object-group " + policyApp.group(2)
 
 # Bind access control lists to interfaces
 
