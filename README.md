@@ -34,3 +34,10 @@ python convert.py /full/path/to/config
 - Additional static applications added
 - Support for dns name address objects
 - Support for any-ipv4 and any-ipv6 default addresses
+
+## Changes in version 1.4
+
+- Object name pattern moved to global variable
+- Support for "." in object names
+- Typo's
+- Code formatting
